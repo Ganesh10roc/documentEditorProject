@@ -15,12 +15,12 @@ const schema = z.object({
     .min(16, "AUTH_SECRET must be at least 16 characters"),
   AUTH_URL: z.string().url().optional(),
   ANTHROPIC_API_KEY: z.string().optional().default(""),
-  // Resend (transactional email) — optional. When unset, email features are
+  // Brevo (transactional email) — optional. When unset, email features are
   // silently disabled (e.g. share invites just don't send a notification).
-  RESEND_API_KEY: z.string().optional().default(""),
-  // Verified sender. Defaults to Resend's shared test address, which can only
-  // deliver to your own account email until you verify a domain.
-  EMAIL_FROM: z.string().optional().default("Palimpsest <onboarding@resend.dev>"),
+  BREVO_API_KEY: z.string().optional().default(""),
+  // Verified sender address ("Name <email>"). Must be a sender you've verified
+  // in Brevo; once verified, Brevo can deliver to ANY recipient (no domain).
+  EMAIL_FROM: z.string().optional().default("Palimpsest <no-reply@example.com>"),
   MAX_SYNC_PAYLOAD_BYTES: z.coerce.number().int().positive().default(524288),
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -44,7 +44,7 @@ export const env = load();
 export const aiEnabled = env.ANTHROPIC_API_KEY.length > 0;
 
 /** Transactional email is optional; senders no-op when no key is configured. */
-export const emailEnabled = env.RESEND_API_KEY.length > 0;
+export const emailEnabled = env.BREVO_API_KEY.length > 0;
 
 /**
  * Public base URL for links embedded in emails (e.g. a document link). Prefers

@@ -1,18 +1,17 @@
 import "server-only";
-import { Resend } from "resend";
 import { appBaseUrl, emailEnabled, env } from "@/lib/env";
 import type { Role } from "@/lib/constants";
 
 /**
- * Transactional email via Resend.
+ * Transactional email via Brevo (https://brevo.com) over its REST API.
  *
- * Entirely OPTIONAL: when `RESEND_API_KEY` is unset the client is never created
- * and every sender becomes a no-op, so the app runs unchanged without email.
- * Sends are best-effort — a delivery failure is logged but NEVER thrown, so a
- * flaky mail provider can't break the user action that triggered it (e.g.
- * sharing a document still succeeds even if the notification email fails).
+ * Unlike domain-locked providers, Brevo delivers to ANY recipient once you
+ * verify a single sender address — so no domain is required. Entirely OPTIONAL:
+ * when `BREVO_API_KEY` is unset every sender becomes a no-op, so the app runs
+ * unchanged without email. Sends are best-effort — a failure is logged but NEVER
+ * thrown, so a flaky mail provider can't break the action that triggered it.
  */
-const resend = emailEnabled ? new Resend(env.RESEND_API_KEY) : null;
+const BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email";
 
 const APP_NAME = "Palimpsest";
 
@@ -21,24 +20,40 @@ interface SendResult {
   error?: string;
 }
 
+/** Parse `EMAIL_FROM` ("Name <email@x>" or bare "email@x") into Brevo's shape. */
+function parseSender(from: string): { name: string; email: string } {
+  const m = from.match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
+  if (m) return { name: m[1] || APP_NAME, email: m[2]!.trim() };
+  return { name: APP_NAME, email: from.trim() };
+}
+
 async function send(opts: {
   to: string;
   subject: string;
   html: string;
   text: string;
 }): Promise<SendResult> {
-  if (!resend) return { sent: false, error: "email_disabled" };
+  if (!emailEnabled) return { sent: false, error: "email_disabled" };
   try {
-    const { error } = await resend.emails.send({
-      from: env.EMAIL_FROM,
-      to: opts.to,
-      subject: opts.subject,
-      html: opts.html,
-      text: opts.text,
+    const res = await fetch(BREVO_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "api-key": env.BREVO_API_KEY,
+        "content-type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify({
+        sender: parseSender(env.EMAIL_FROM),
+        to: [{ email: opts.to }],
+        subject: opts.subject,
+        htmlContent: opts.html,
+        textContent: opts.text,
+      }),
     });
-    if (error) {
-      console.error("[email] send failed:", error);
-      return { sent: false, error: error.message };
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      console.error("[email] Brevo send failed:", res.status, detail);
+      return { sent: false, error: `brevo_${res.status}` };
     }
     return { sent: true };
   } catch (err) {
