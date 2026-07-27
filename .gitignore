@@ -1,0 +1,37 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# testing
+/coverage
+/test-results
+/playwright-report
+/.playwright
+
+# env
+.env
+.env*.local
+!.env.example
+
+# drizzle
+/drizzle/meta
+
+# misc
+.DS_Store
+*.pem
+*.log
+npm-debug.log*
+.vercel
+.idea
+.vscode/*
+!.vscode/extensions.json
+tsconfig.tsbuildinfo

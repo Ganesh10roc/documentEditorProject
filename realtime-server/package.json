@@ -1,0 +1,21 @@
+{
+  "name": "palimpsest-realtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Auth-guarded y-websocket relay for Palimpsest live collaboration (cursors + presence).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "jose": "^5.9.6",
+    "lib0": "^0.2.99",
+    "ws": "^8.18.0",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.20"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}

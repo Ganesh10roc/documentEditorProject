@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Palimpsest design system
+   A calm, paper-inspired editorial palette. Ink on warm paper in light mode,
+   soft parchment-glow on charcoal in dark mode. Everything is token-driven so
+   the whole app re-themes from these few variables.
+--------------------------------------------------------------------------- */
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", "Georgia", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --color-ink: #1a1a17;
+  --color-paper: #faf9f5;
+  --color-accent: #b8562f; /* terracotta — a manuscript-red for versions */
+  --color-accent-soft: #e9c8b8;
+
+  --radius-card: 0.875rem;
+}
+
+:root {
+  --bg: #faf9f5;
+  --surface: #ffffff;
+  --surface-2: #f2f0ea;
+  --border: #e6e2d8;
+  --text: #1a1a17;
+  --text-muted: #6b6862;
+  --accent: #b8562f;
+  --accent-contrast: #ffffff;
+  --success: #3f7d58;
+  --warning: #c08a2d;
+  --danger: #c0402d;
+  --ring: rgba(184, 86, 47, 0.35);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #16150f;
+  --surface: #201e17;
+  --surface-2: #2a281f;
+  --border: #38352a;
+  --text: #ece8dd;
+  --text-muted: #9c988a;
+  --accent: #e08a5f;
+  --accent-contrast: #16150f;
+  --success: #6fbf8a;
+  --warning: #e0b45f;
+  --danger: #e08072;
+  --ring: rgba(224, 138, 95, 0.4);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #16150f;
+    --surface: #201e17;
+    --surface-2: #2a281f;
+    --border: #38352a;
+    --text: #ece8dd;
+    --text-muted: #9c988a;
+    --accent: #e08a5f;
+    --accent-contrast: #16150f;
+    --success: #6fbf8a;
+    --warning: #e0b45f;
+    --danger: #e08072;
+    --ring: rgba(224, 138, 95, 0.4);
+    color-scheme: dark;
+  }
+}
+
+* {
+  border-color: var(--border);
+}
+
+html,
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent-soft, #e9c8b8);
+  color: var(--color-ink, #1a1a17);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Respect reduced-motion preferences globally. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ---- ProseMirror / TipTap editor surface -------------------------------- */
+.ProseMirror {
+  outline: none;
+  min-height: 60vh;
+  font-family: var(--font-serif);
+  font-size: 1.125rem;
+  line-height: 1.75;
+  color: var(--text);
+}
+.ProseMirror > * + * {
+  margin-top: 0.85em;
+}
+.ProseMirror h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-top: 1.4em;
+}
+.ProseMirror h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-top: 1.2em;
+}
+.ProseMirror h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 1.4rem;
+}
+.ProseMirror ul {
+  list-style: disc;
+}
+.ProseMirror ol {
+  list-style: decimal;
+}
+.ProseMirror blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 1rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.ProseMirror code {
+  font-family: var(--font-mono);
+  background: var(--surface-2);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.ProseMirror pre {
+  font-family: var(--font-mono);
+  background: var(--surface-2);
+  padding: 0.9rem 1.1rem;
+  border-radius: 0.6rem;
+  overflow-x: auto;
+}
+.ProseMirror pre code {
+  background: none;
+  padding: 0;
+}
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--text-muted);
+  pointer-events: none;
+  height: 0;
+}
+
+/* Live remote collaborator cursors (y-prosemirror awareness). */
+.collaboration-cursor__caret {
+  border-left: 1px solid currentColor;
+  border-right: 1px solid currentColor;
+  margin-left: -1px;
+  margin-right: -1px;
+  position: relative;
+  word-break: normal;
+  pointer-events: none;
+}
+.collaboration-cursor__label {
+  border-radius: 3px 3px 3px 0;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  left: -1px;
+  line-height: normal;
+  padding: 1px 6px;
+  position: absolute;
+  top: -1.5em;
+  user-select: none;
+  white-space: nowrap;
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.animate-pulse-soft {
+  animation: pulse-soft 1.8s ease-in-out infinite;
+}
