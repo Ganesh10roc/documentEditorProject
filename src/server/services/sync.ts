@@ -3,6 +3,7 @@ import { and, asc, count, eq, gt } from "drizzle-orm";
 import { withUser, type ScopedDb } from "@/server/db";
 import { documentUpdates } from "@/server/db/schema";
 import { decodeUpdate } from "@/server/validation/sync";
+import { canEdit } from "@/lib/constants";
 import { requireEditor, requireMember } from "./authz";
 import { touchDocument } from "./documents";
 import { SyncPayloadError } from "@/server/errors";
@@ -71,6 +72,7 @@ export async function sync(
   const mergedIncoming = hasWrite ? validateAndMerge(updatesB64) : null;
 
   return withUser(userId, async (tx) => {
+    let mayCompact: boolean;
     if (hasWrite) {
       // Viewers are rejected here (403) — and again by the RLS insert policy.
       await requireEditor(tx, documentId, userId);
@@ -80,8 +82,13 @@ export async function sync(
         update: Buffer.from(mergedIncoming!),
       });
       await touchDocument(tx, documentId);
+      mayCompact = true;
     } else {
-      await requireMember(tx, documentId, userId);
+      const role = await requireMember(tx, documentId, userId);
+      // Compaction does DELETE+INSERT on the log — writes a viewer's RLS policy
+      // forbids. Running it on a viewer's read path would abort the transaction
+      // (500), so only editors/owners ever compact.
+      mayCompact = canEdit(role);
     }
 
     // Pull everything the client is missing.
@@ -101,7 +108,8 @@ export async function sync(
 
     // Opportunistic compaction keeps the log bounded. Awaited (never fire-and-
     // forget) so it completes before the transaction connection is released.
-    await maybeCompact(tx, documentId);
+    // Editors/owners only — a viewer's write is blocked by RLS (would 500).
+    if (mayCompact) await maybeCompact(tx, documentId);
 
     return {
       merged: merged ? Buffer.from(merged).toString("base64") : null,

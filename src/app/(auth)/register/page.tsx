@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
@@ -16,6 +16,13 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Prefill the email when arriving from an invitation link (/register?email=…).
+  // Read from the URL directly to avoid needing a Suspense boundary.
+  useEffect(() => {
+    const invited = new URLSearchParams(window.location.search).get("email");
+    if (invited) setEmail(invited);
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

@@ -24,16 +24,45 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  // Latest values via refs so the keydown listener is attached ONCE and never
+  // re-runs the focus effect (which would steal/relocate focus mid-interaction).
+  const loadingRef = useRef(loading);
+  const onCancelRef = useRef(onCancel);
+  loadingRef.current = loading;
+  onCancelRef.current = onCancel;
 
   useEffect(() => {
     cancelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !loading) onCancel();
+      if (e.key === "Escape" && !loadingRef.current) {
+        onCancelRef.current();
+        return;
+      }
+      // Focus trap: keep Tab/Shift-Tab cycling inside the modal.
+      if (e.key === "Tab" && dialogRef.current) {
+        const focusables = Array.from(
+          dialogRef.current.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          )
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0]!;
+        const last = focusables[focusables.length - 1]!;
+        const active = document.activeElement;
+        if (e.shiftKey && active === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [loading, onCancel]);
+  }, []);
 
   return (
     <div
@@ -45,6 +74,7 @@ export function ConfirmDialog({
       onClick={() => !loading && onCancel()}
     >
       <div
+        ref={dialogRef}
         className="w-full max-w-sm rounded-[var(--radius-card)] border border-[var(--border)] bg-[var(--surface)] p-5"
         onClick={(e) => e.stopPropagation()}
       >

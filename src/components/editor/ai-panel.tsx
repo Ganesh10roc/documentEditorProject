@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import { Loader2, Sparkles, Type, WandSparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,29 @@ export function AiPanel({
   const [output, setOutput] = useState("");
   const [titles, setTitles] = useState<string[]>([]);
   const [instruction, setInstruction] = useState("");
+  const abortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+
+  // Abort any in-flight AI request when the panel closes/unmounts so it stops
+  // streaming and never calls setState on an unmounted component.
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  // Start a fresh request, cancelling any previous one; returns its signal.
+  function beginRequest(): AbortSignal {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    return ac.signal;
+  }
+
+  function isAbort(e: unknown): boolean {
+    return e instanceof DOMException && e.name === "AbortError";
+  }
 
   function docText() {
     return editor?.getText() ?? "";
@@ -41,12 +64,13 @@ export function AiPanel({
     setError(null);
     setOutput("");
     setLoading(true);
+    const signal = beginRequest();
     try {
-      await streamAI("summarize", { text: docText() }, setOutput);
+      await streamAI("summarize", { text: docText() }, setOutput, signal);
     } catch (e) {
-      setError((e as Error).message);
+      if (!isAbort(e) && mountedRef.current) setError((e as Error).message);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }
 
@@ -54,12 +78,13 @@ export function AiPanel({
     setError(null);
     setTitles([]);
     setLoading(true);
+    const signal = beginRequest();
     try {
-      setTitles(await suggestTitles(docText()));
+      setTitles(await suggestTitles(docText(), signal));
     } catch (e) {
-      setError((e as Error).message);
+      if (!isAbort(e) && mountedRef.current) setError((e as Error).message);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }
 
@@ -72,12 +97,13 @@ export function AiPanel({
     setError(null);
     setOutput("");
     setLoading(true);
+    const signal = beginRequest();
     try {
-      await streamAI("rewrite", { passage, instruction }, setOutput);
+      await streamAI("rewrite", { passage, instruction }, setOutput, signal);
     } catch (e) {
-      setError((e as Error).message);
+      if (!isAbort(e) && mountedRef.current) setError((e as Error).message);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }
 

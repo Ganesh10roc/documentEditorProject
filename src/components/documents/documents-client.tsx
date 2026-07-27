@@ -33,13 +33,20 @@ export function DocumentsClient({
 
   async function deleteDocument(id: string) {
     setDeleting(true);
+    setError(null);
     try {
       const res = await fetch(`/api/documents/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        setDocs((prev) => prev.filter((d) => d.id !== id));
+      if (!res.ok) {
         setPendingDelete(null);
-        router.refresh();
+        setError("Couldn't delete the document. Please try again.");
+        return;
       }
+      setDocs((prev) => prev.filter((d) => d.id !== id));
+      setPendingDelete(null);
+      router.refresh();
+    } catch {
+      setPendingDelete(null);
+      setError("You appear to be offline. Please try again when connected.");
     } finally {
       setDeleting(false);
     }
@@ -132,7 +139,9 @@ export function DocumentsClient({
                   {doc.title}
                 </h2>
                 <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
-                  <span>Edited {timeAgo(doc.updatedAt)}</span>
+                  {/* Relative time is computed from Date.now(), which differs by
+                      a beat between SSR and hydration — suppress that warning. */}
+                  <span suppressHydrationWarning>Edited {timeAgo(doc.updatedAt)}</span>
                   <span className="inline-flex items-center gap-1">
                     <Users size={12} aria-hidden /> {doc.memberCount}
                   </span>

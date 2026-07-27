@@ -16,6 +16,13 @@ interface Member {
   role: Role;
 }
 
+interface Invite {
+  id: string;
+  email: string;
+  role: "editor" | "viewer";
+  createdAt: string;
+}
+
 export function ShareDialog({
   documentId,
   callerRole,
@@ -28,12 +35,14 @@ export function ShareDialog({
   onClose: () => void;
 }) {
   const [members, setMembers] = useState<Member[]>([]);
+  const [invites, setInvites] = useState<Invite[]>([]);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"editor" | "viewer">("editor");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const isOwner = callerRole === "owner";
   const router = useRouter();
 
@@ -60,8 +69,16 @@ export function ShareDialog({
     if (res.ok) {
       const { data } = await res.json();
       setMembers(data.members);
+      setInvites(data.invites ?? []);
     }
     setLoading(false);
+  }
+
+  async function removeInvite(inviteId: string) {
+    await fetch(`/api/documents/${documentId}/invites/${inviteId}`, {
+      method: "DELETE",
+    });
+    await load();
   }
 
   useEffect(() => {
@@ -72,6 +89,7 @@ export function ShareDialog({
   async function addMember(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     setBusy(true);
     try {
       const res = await fetch(`/api/documents/${documentId}/members`, {
@@ -84,8 +102,15 @@ export function ShareDialog({
         setError(body?.error?.message ?? "Could not share.");
         return;
       }
+      setNotice(
+        body?.data?.kind === "invite"
+          ? `Invitation sent to ${body.data.email}. They'll get access when they sign up.`
+          : "Added to the document."
+      );
       setEmail("");
       await load();
+    } catch {
+      setError("Something went wrong. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -157,6 +182,12 @@ export function ShareDialog({
           </p>
         )}
 
+        {notice && (
+          <p className="text-sm text-[var(--accent)] mb-3" role="status">
+            {notice}
+          </p>
+        )}
+
         {loading ? (
           <div className="py-8 grid place-items-center text-[var(--text-muted)]">
             <Loader2 className="animate-spin" />
@@ -208,6 +239,43 @@ export function ShareDialog({
               </li>
             ))}
           </ul>
+        )}
+
+        {invites.length > 0 && (
+          <div className="mt-4 border-t border-[var(--border)] pt-3">
+            <p className="text-xs font-medium text-[var(--text-muted)] mb-2">
+              Pending invitations
+            </p>
+            <ul className="space-y-2">
+              {invites.map((inv) => (
+                <li key={inv.id} className="flex items-center gap-3">
+                  <div
+                    className="h-8 w-8 rounded-full grid place-items-center text-xs font-semibold text-white shrink-0"
+                    style={{ background: colorFromString(inv.email) }}
+                  >
+                    {initials(inv.email)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm truncate">{inv.email}</p>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      Invited · hasn&apos;t signed up yet
+                    </p>
+                  </div>
+                  <RoleBadge role={inv.role} />
+                  {isOwner && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeInvite(inv.id)}
+                      aria-label={`Revoke invite for ${inv.email}`}
+                    >
+                      <Trash2 size={15} className="text-[var(--danger)]" />
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {!isOwner && (

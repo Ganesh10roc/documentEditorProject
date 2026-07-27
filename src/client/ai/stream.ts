@@ -35,13 +35,21 @@ export async function streamAI(
 }
 
 /** Non-streamed title suggestions. */
-export async function suggestTitles(text: string): Promise<string[]> {
+export async function suggestTitles(
+  text: string,
+  signal?: AbortSignal
+): Promise<string[]> {
   const res = await fetch("/api/ai/title", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ text }),
+    signal,
   });
-  if (!res.ok) throw new Error("Could not suggest titles.");
+  if (!res.ok) {
+    if (res.status === 503) throw new Error("AI features are not configured.");
+    if (res.status === 429) throw new Error("Too many AI requests — slow down.");
+    throw new Error("Could not suggest titles.");
+  }
   const { data } = await res.json();
   return data.titles as string[];
 }

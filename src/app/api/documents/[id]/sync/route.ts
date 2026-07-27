@@ -4,6 +4,7 @@ import { pull, sync } from "@/server/services/sync";
 import { syncPullSchema, syncPushSchema } from "@/server/validation/sync";
 import { fail, handle, ok, tooLarge } from "@/server/http/responses";
 import { rateLimit } from "@/server/http/rate-limit";
+import { requireUuid } from "@/server/http/params";
 import { env } from "@/lib/env";
 
 export const runtime = "nodejs";
@@ -17,7 +18,12 @@ type Params = { params: Promise<{ id: string }> };
 export function GET(req: NextRequest, { params }: Params) {
   return handle(async () => {
     const user = await requireUser();
-    const { id } = await params;
+    const { id: rawId } = await params;
+    const id = requireUuid(rawId);
+    // Throttle the poll/read path too — it also triggers opportunistic compaction.
+    const rl = rateLimit(`pull:${user.id}:${id}`, 120, 10_000);
+    if (!rl.allowed) return fail(429, "rate_limited", "Slow down");
+
     const { since } = syncPullSchema.parse({
       since: req.nextUrl.searchParams.get("since") ?? 0,
     });
@@ -38,7 +44,8 @@ export function GET(req: NextRequest, { params }: Params) {
 export function POST(req: NextRequest, { params }: Params) {
   return handle(async () => {
     const user = await requireUser();
-    const { id } = await params;
+    const { id: rawId } = await params;
+    const id = requireUuid(rawId);
 
     // Layer 0: rate limit the write path.
     const rl = rateLimit(`sync:${user.id}:${id}`, 60, 10_000);

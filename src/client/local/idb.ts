@@ -22,7 +22,18 @@ function getDb(): Promise<IDBDatabase> {
       }
     };
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onerror = () => {
+      // Don't cache the rejection — a transient failure (e.g. private-mode
+      // quota) must not permanently disable persistence for the whole session.
+      dbPromise = null;
+      reject(req.error);
+    };
+    // Another tab holding an older version open blocks the upgrade; surface it
+    // as a failure so callers can retry rather than hang forever.
+    req.onblocked = () => {
+      dbPromise = null;
+      reject(new Error("IndexedDB open blocked by another tab"));
+    };
   });
   return dbPromise;
 }

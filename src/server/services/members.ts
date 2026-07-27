@@ -1,13 +1,13 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db, withUser } from "@/server/db";
 import { documentMembers, users } from "@/server/db/schema";
 import type { Role } from "@/lib/constants";
 import {
   ForbiddenError,
-  NotFoundError,
   requireMember,
   requireOwner,
 } from "./authz";
+import { createInvite } from "./invites";
 
 export interface MemberView {
   userId: string;
@@ -37,29 +37,54 @@ export async function listMembers(
   });
 }
 
-/** Share a document with another user by email. Owner only. */
+export type ShareResult =
+  | {
+      kind: "member";
+      member: {
+        userId: string;
+        name: string;
+        email: string;
+        role: Exclude<Role, "owner">;
+      };
+    }
+  | { kind: "invite"; email: string; role: Exclude<Role, "owner"> };
+
+/**
+ * Share a document by email (owner only). If the email already has an account,
+ * they are added as a member immediately. If not, a pending invitation is
+ * created that becomes a membership the moment that email registers.
+ */
 export async function addMember(
   userId: string,
   documentId: string,
   email: string,
   role: Exclude<Role, "owner">
-) {
-  // Resolve email → user with the unscoped client: RLS on `users` only exposes
-  // the caller to themselves, but sharing must be able to find any registered
-  // user. This query is deliberately narrow (email equality) and leaks nothing
-  // beyond "an account exists" — the actual authorization happens below.
+): Promise<ShareResult> {
+  // Resolve email → user with the unscoped client (case-insensitive, matching
+  // the lower(email) unique index): RLS on `users` only exposes the caller to
+  // themselves, but sharing must be able to find any registered user. Leaks
+  // nothing beyond "an account exists" — authorization happens below.
   const [invitee] = await db
     .select({ id: users.id, name: users.name })
     .from(users)
-    .where(eq(users.email, email))
+    .where(eq(sql`lower(${users.email})`, email))
     .limit(1);
 
   if (!invitee) {
-    throw new NotFoundError("No user with that email address");
+    // No account yet → create a pending invite (createInvite verifies ownership).
+    const invite = await createInvite(userId, documentId, email, role);
+    return { kind: "invite", email: invite.email, role: invite.role };
   }
 
   return withUser(userId, async (tx) => {
     await requireOwner(tx, documentId, userId);
+    // The owner already has full access; sharing with themselves would only
+    // downgrade their own membership row and lock them out of managing the doc.
+    if (invitee.id === userId) {
+      throw new ForbiddenError(
+        "You already own this document and cannot change your own role here"
+      );
+    }
     await tx
       .insert(documentMembers)
       .values({ documentId, userId: invitee.id, role })
@@ -68,7 +93,10 @@ export async function addMember(
         set: { role },
       });
 
-    return { userId: invitee.id, name: invitee.name, email, role };
+    return {
+      kind: "member",
+      member: { userId: invitee.id, name: invitee.name, email, role },
+    };
   });
 }
 

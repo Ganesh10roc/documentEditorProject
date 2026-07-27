@@ -3,6 +3,7 @@ import { requireUser } from "@/server/auth/session";
 import { createSnapshot, listSnapshots } from "@/server/services/versions";
 import { createSnapshotSchema } from "@/server/validation/documents";
 import { handle, ok } from "@/server/http/responses";
+import { requireUuid } from "@/server/http/params";
 
 export const runtime = "nodejs";
 
@@ -12,7 +13,8 @@ type Params = { params: Promise<{ id: string }> };
 export function GET(_req: NextRequest, { params }: Params) {
   return handle(async () => {
     const user = await requireUser();
-    const { id } = await params;
+    const { id: rawId } = await params;
+    const id = requireUuid(rawId);
     const versions = await listSnapshots(user.id, id);
     return ok({ versions });
   });
@@ -22,7 +24,8 @@ export function GET(_req: NextRequest, { params }: Params) {
 export function POST(req: NextRequest, { params }: Params) {
   return handle(async () => {
     const user = await requireUser();
-    const { id } = await params;
+    const { id: rawId } = await params;
+    const id = requireUuid(rawId);
     const { label, note } = createSnapshotSchema.parse(await req.json());
     const snapshot = await createSnapshot(user.id, id, label, note);
     return ok(

@@ -146,6 +146,10 @@ async function setupRealtime(
     if (!res.ok) return;
     const { data } = await res.json();
 
+    // The doc may have been released (and is queued for destruction) while the
+    // token request was in flight — never open a socket on a dying doc.
+    if (entry.refs <= 0 || registry.get(documentId) !== entry) return;
+
     const provider = new WebsocketProvider(wsUrl, documentId, entry.ydoc, {
       params: { token: data.token },
     });

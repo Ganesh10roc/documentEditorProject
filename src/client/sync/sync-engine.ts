@@ -74,6 +74,7 @@ export class SyncEngine {
 
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private pullTimer: ReturnType<typeof setInterval> | null = null;
+  private backoffTimer: ReturnType<typeof setTimeout> | null = null;
   private disposeConnectivity: (() => void) | null = null;
   private readonly updateHandler: (u: Uint8Array, origin: unknown) => void;
 
@@ -148,6 +149,7 @@ export class SyncEngine {
     this.ydoc.off("update", this.updateHandler);
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
     if (this.pullTimer) clearInterval(this.pullTimer);
+    if (this.backoffTimer) clearTimeout(this.backoffTimer);
     this.disposeConnectivity?.();
   }
 
@@ -248,6 +250,9 @@ export class SyncEngine {
   }
 
   private applyMerged(mergedB64: string | null, seq: number) {
+    // A response can resolve after stop()/teardown — never touch a doc that may
+    // already be destroyed.
+    if (!this.started) return;
     if (mergedB64) {
       const update = fromBase64(mergedB64);
       // Tag as remote so the update handler doesn't re-enqueue it.
@@ -279,8 +284,11 @@ export class SyncEngine {
       this.backoff ? this.backoff * 2 : SYNC_BACKOFF_BASE_MS,
       SYNC_BACKOFF_MAX_MS
     );
-    setTimeout(() => {
-      if (isOnline()) void this.sync();
+    if (this.backoffTimer) clearTimeout(this.backoffTimer);
+    this.backoffTimer = setTimeout(() => {
+      this.backoffTimer = null;
+      // Guard: the engine may have been stopped during the backoff window.
+      if (this.started && isOnline()) void this.sync();
     }, this.backoff);
   }
 }

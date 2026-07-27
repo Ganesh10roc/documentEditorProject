@@ -67,6 +67,17 @@ create table if not exists "document_snapshots" (
   "created_at"     timestamptz default now() not null
 );
 
+-- Pending invitations for emails without an account yet. Managed only via the
+-- owner (admin) connection, so it needs NO RLS policy or app-role grant.
+create table if not exists "document_invites" (
+  "id"          uuid primary key default gen_random_uuid() not null,
+  "document_id" uuid not null,
+  "email"       text not null,
+  "role"        "doc_role" default 'editor' not null,
+  "invited_by"  uuid,
+  "created_at"  timestamptz default now() not null
+);
+
 -- ---------------------------------------------------------------------------
 -- 3. Foreign keys
 -- ---------------------------------------------------------------------------
@@ -112,6 +123,18 @@ do $$ begin
     foreign key ("created_by") references "public"."users"("id") on delete set null;
 exception when duplicate_object then null; end $$;
 
+do $$ begin
+  alter table "document_invites"
+    add constraint "document_invites_document_id_documents_id_fk"
+    foreign key ("document_id") references "public"."documents"("id") on delete cascade;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table "document_invites"
+    add constraint "document_invites_invited_by_users_id_fk"
+    foreign key ("invited_by") references "public"."users"("id") on delete set null;
+exception when duplicate_object then null; end $$;
+
 -- ---------------------------------------------------------------------------
 -- 4. Indexes
 -- ---------------------------------------------------------------------------
@@ -119,6 +142,8 @@ create index if not exists "documents_owner_idx"           on "documents" ("owne
 create index if not exists "document_members_user_idx"     on "document_members" ("user_id");
 create index if not exists "document_updates_doc_seq_idx"  on "document_updates" ("document_id", "seq");
 create index if not exists "document_snapshots_doc_idx"    on "document_snapshots" ("document_id", "created_at");
+create unique index if not exists "document_invites_doc_email_unique" on "document_invites" ("document_id", "email");
+create index if not exists "document_invites_email_idx"    on "document_invites" ("email");
 create unique index if not exists "users_email_unique"     on "users" (lower("email"));
 
 -- ---------------------------------------------------------------------------
@@ -195,6 +220,11 @@ drop policy if exists snapshots_member_select on document_snapshots;
 create policy snapshots_member_select on document_snapshots for select using (app_is_member(document_id));
 drop policy if exists snapshots_editor_insert on document_snapshots;
 create policy snapshots_editor_insert on document_snapshots for insert with check (app_can_edit(document_id));
+
+-- document_invites is touched ONLY by the owner (admin) connection, which
+-- bypasses RLS. Enable RLS with NO policy so the public REST API (anon key)
+-- gets zero access, while the app's owner connection keeps full access.
+alter table document_invites enable row level security;
 
 -- ---------------------------------------------------------------------------
 -- 7. Restricted application role (RLS is enforced for this role)

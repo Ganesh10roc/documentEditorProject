@@ -92,6 +92,38 @@ export const documentMembers = pgTable(
 );
 
 // --------------------------------------------------------------------------
+// Pending invitations — a document shared with an email that has NO account
+// yet. Resolved into a real membership when that email registers. Managed only
+// via the owner (admin) connection, so it needs no RLS policy of its own.
+// --------------------------------------------------------------------------
+export const documentInvites = pgTable(
+  "document_invites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    // Always stored lower-cased so lookups/uniqueness are case-insensitive.
+    email: text("email").notNull(),
+    role: roleEnum("role").notNull().default("editor"),
+    invitedBy: uuid("invited_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    // One pending invite per (document, email); re-inviting updates the role.
+    docEmailUnique: uniqueIndex("document_invites_doc_email_unique").on(
+      t.documentId,
+      t.email
+    ),
+    emailIdx: index("document_invites_email_idx").on(t.email),
+  })
+);
+
+// --------------------------------------------------------------------------
 // Append-only Yjs update log — the shared source of truth on the server.
 // Clients pull rows where seq > lastSeq; each row is a commutative CRDT delta.
 // --------------------------------------------------------------------------
@@ -180,3 +212,4 @@ export type User = typeof users.$inferSelect;
 export type Document = typeof documents.$inferSelect;
 export type DocumentMember = typeof documentMembers.$inferSelect;
 export type DocumentSnapshot = typeof documentSnapshots.$inferSelect;
+export type DocumentInvite = typeof documentInvites.$inferSelect;

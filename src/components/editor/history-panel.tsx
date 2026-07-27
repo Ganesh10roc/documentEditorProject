@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import {
   History,
@@ -43,15 +43,31 @@ export function HistoryPanel({
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [explainId, setExplainId] = useState<string | null>(null);
   const [explanation, setExplanation] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const explainAbortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      explainAbortRef.current?.abort();
+    };
+  }, []);
 
   async function load() {
     setLoading(true);
-    const res = await fetch(`/api/documents/${documentId}/versions`);
-    if (res.ok) {
+    setError(null);
+    try {
+      const res = await fetch(`/api/documents/${documentId}/versions`);
+      if (!res.ok) throw new Error();
       const { data } = await res.json();
       setVersions(data.versions);
+    } catch {
+      // Never leave the panel stuck on a spinner — surface a retry instead.
+      setError("Couldn't load version history. Check your connection and try again.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   useEffect(() => {
@@ -63,14 +79,18 @@ export function HistoryPanel({
     e.preventDefault();
     if (!label.trim()) return;
     setBusy(true);
+    setError(null);
     try {
-      await fetch(`/api/documents/${documentId}/versions`, {
+      const res = await fetch(`/api/documents/${documentId}/versions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ label }),
       });
+      if (!res.ok) throw new Error();
       setLabel("");
       await load();
+    } catch {
+      setError("Couldn't capture this version. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -94,19 +114,26 @@ export function HistoryPanel({
   }
 
   async function explain(versionId: string) {
+    // Cancel any previous explain (switching versions / closing the panel).
+    explainAbortRef.current?.abort();
+    const ac = new AbortController();
+    explainAbortRef.current = ac;
     setExplainId(versionId);
     setExplanation("");
     try {
       const res = await fetch(
-        `/api/documents/${documentId}/versions/${versionId}`
+        `/api/documents/${documentId}/versions/${versionId}`,
+        { signal: ac.signal }
       );
       if (!res.ok) throw new Error();
       const { data } = await res.json();
       const before = data.text as string;
       const after = editor?.getText() ?? "";
-      await streamAI("explain-diff", { before, after }, setExplanation);
-    } catch {
-      setExplanation("Could not explain the changes.");
+      await streamAI("explain-diff", { before, after }, setExplanation, ac.signal);
+    } catch (e) {
+      // Aborted requests are intentional — don't surface them as errors.
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      if (mountedRef.current) setExplanation("Could not explain the changes.");
     }
   }
 
@@ -149,6 +176,15 @@ export function HistoryPanel({
         {loading ? (
           <div className="py-8 grid place-items-center text-[var(--text-muted)]">
             <Loader2 className="animate-spin" />
+          </div>
+        ) : error ? (
+          <div className="py-8 text-center">
+            <p className="text-sm text-[var(--danger)] mb-3" role="alert">
+              {error}
+            </p>
+            <Button variant="secondary" size="sm" onClick={() => void load()}>
+              <RotateCcw size={13} /> Try again
+            </Button>
           </div>
         ) : versions.length === 0 ? (
           <p className="text-sm text-[var(--text-muted)] py-8 text-center">

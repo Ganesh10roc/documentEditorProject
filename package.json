@@ -39,6 +39,7 @@
     "postgres": "^3.4.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "resend": "^6.18.0",
     "tailwind-merge": "^2.5.5",
     "y-indexeddb": "^9.0.12",
     "y-prosemirror": "^1.2.15",
